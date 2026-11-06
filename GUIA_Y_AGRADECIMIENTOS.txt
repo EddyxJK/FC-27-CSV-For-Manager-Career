@@ -18,7 +18,7 @@ Si el CSV ya existe, el programa pregunta antes de reemplazarlo. El archivo orig
 
 NOMBRES NO RESUELTOS
 
-Algunos jugadores generados pueden aparecer con un marcador como [ID 46000]. Para mejorar la resolución de nombres en el parser directo, se puede indicar una base FC27 con la tabla playernames mediante --names-db. Al compilar la aplicación de Windows, un diccionario JSON se incorpora solo si se pasa explícitamente con -NamesJson. Los diccionarios derivados del juego se excluyen de Git.
+Los jugadores generados por la carrera usan IDs especiales para sus nombres. Al compilar, build-windows.ps1 busca la instalación local de FC27, extrae sus tablas de nombres y las incorpora al ejecutable. Requiere Node.js 24 o posterior y Python 3. Los archivos del juego y diccionarios solo se guardan localmente dentro de .build/ y se excluyen de GitHub. Si FC27 está en otra carpeta, usa -GameDirectory "ruta". Sin una instalación local del juego, se puede compilar con -SkipGameData, pero algunos nombres aparecerán como [ID n].
 
 AGRADECIMIENTOS
 
