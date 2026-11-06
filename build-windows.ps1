@@ -39,7 +39,8 @@ $parserDir = Join-Path $assets 'parser'
 $runtimeDir = Join-Path $assets 'runtime'
 $pythonRuntime = Join-Path $runtimeDir 'python'
 $distDir = Join-Path $project 'dist'
-$payload = Join-Path $buildRoot 'payload.zip'
+$releaseDir = Join-Path $distDir 'FC27 Carrera CSV'
+$releaseZip = Join-Path $distDir 'FC27-Carrera-CSV-portable-v1.0.0.zip'
 
 if (Test-Path $buildRoot) { Remove-Item -LiteralPath $buildRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $parserDir, $runtimeDir, $pythonRuntime, $distDir | Out-Null
@@ -81,8 +82,6 @@ else {
 $pythonCheck = & (Join-Path $pythonRuntime 'python.exe') -c "import argparse, ctypes, os, struct, zlib; print('Python runtime OK')"
 if ($LASTEXITCODE -ne 0) { throw "El Python portátil no pudo iniciar: $pythonCheck" }
 
-Compress-Archive -Path (Join-Path $assets 'parser'), (Join-Path $assets 'runtime') -DestinationPath $payload -CompressionLevel Optimal
-
 $compilerCandidates = @(
     "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
     "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
@@ -90,13 +89,25 @@ $compilerCandidates = @(
 $compiler = $compilerCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $compiler) { throw 'No encontré el compilador C# incluido con .NET Framework para Windows.' }
 
-$outputExe = Join-Path $distDir 'FC27 Carrera CSV.exe'
-$resourceArg = "$payload,FC27CarreraCsv.Payload.zip"
-& $compiler /nologo /target:winexe "/out:$outputExe" `
+$launcherExe = Join-Path $releaseDir 'FC27 Carrera CSV.exe'
+if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+Copy-Item -Recurse -Force (Join-Path $assets 'parser') $releaseDir
+Copy-Item -Recurse -Force (Join-Path $assets 'runtime') $releaseDir
+@'
+FC27 Carrera CSV
+
+Extrae aquí el ZIP completo y abre "FC27 Carrera CSV.exe".
+La primera vez necesita EA SPORTS FC 27 instalado para preparar localmente los nombres.
+'@ | Set-Content -LiteralPath (Join-Path $releaseDir 'LEEME.txt') -Encoding utf8
+& $compiler /nologo /target:winexe "/out:$launcherExe" `
     /reference:System.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll `
     /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll `
-    "/resource:$resourceArg" (Join-Path $project 'src/Launcher.cs')
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path $outputExe)) { throw 'No se pudo compilar el ejecutable.' }
+    (Join-Path $project 'src/Launcher.cs')
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $launcherExe)) { throw 'No se pudo compilar el lanzador de Windows.' }
+if (Test-Path -LiteralPath $releaseZip) { Remove-Item -LiteralPath $releaseZip -Force }
+Compress-Archive -Path $releaseDir -DestinationPath $releaseZip -CompressionLevel Optimal
 
-Write-Host "Aplicación creada: $outputExe"
-Write-Host 'El ejecutable no contiene datos de EA. Al usarlo, obtiene las listas de nombres desde el FC27 instalado en ese equipo.'
+Write-Host "Paquete portable listo para Releases: $releaseZip"
+Write-Host "Lanzador: $launcherExe"
+Write-Host 'No publiques solo el lanzador: el ZIP completo incluye las dependencias necesarias y no contiene datos de EA.'
