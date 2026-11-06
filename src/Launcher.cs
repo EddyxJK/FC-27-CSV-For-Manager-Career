@@ -80,7 +80,7 @@ internal sealed class MainWindow : Form
 {
     internal static readonly string AssetRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "FC27 Carrera CSV", "1.0");
+        "FC27 Carrera CSV", "1.1");
     private readonly Label status = new Label();
     private readonly Label selected = new Label();
     private readonly Button choose = new Button();

@@ -21,15 +21,22 @@ const players = table(careerDb, 'players');
 const links = table(careerDb, 'teamplayerlinks');
 const teams = table(careerDb, 'teams');
 const nameMap = new Map();
+const careerFirstNames = new Map();
+const careerLastNames = new Map();
+const careerCommonNames = new Map();
 const bundledNames = path.join(path.dirname(fileURLToPath(import.meta.url)), 'playernames-fc27.json');
 if (fs.existsSync(bundledNames)) {
   for (const [id, name] of Object.entries(JSON.parse(fs.readFileSync(bundledNames, 'utf8')))) nameMap.set(Number(id), name);
 }
+const bundledCareerNames = path.join(path.dirname(fileURLToPath(import.meta.url)), 'career-names-fc27.json');
+if (fs.existsSync(bundledCareerNames)) loadCareerNames(JSON.parse(fs.readFileSync(bundledCareerNames, 'utf8')));
 if (args['names-db']) {
   const gameDb = parseEaFile(fs.readFileSync(args['names-db']), { metadata, fileName: path.basename(args['names-db']) });
-  const nameTable = gameDb.databases.flatMap(db => db.tables).find(t => t.name === 'playernames');
+  const allTables = gameDb.databases.flatMap(db => db.tables);
+  const nameTable = allTables.find(t => t.name === 'playernames');
   if (!nameTable) throw new Error('La base indicada no contiene la tabla playernames.');
   for (const row of nameTable.records) if (Number.isInteger(row.nameid) && row.name) nameMap.set(row.nameid, row.name);
+  loadCareerNames(Object.fromEntries(['career_firstnames','career_lastnames','career_commonnames'].map(name => [name, allTables.find(t => t.name === name)?.records ?? []])));
 }
 
 const teamNames = new Map(teams.records.map(t => [t.teamid, t.teamname ?? '']));
@@ -53,7 +60,7 @@ for (const p of players.records) {
   const linksForPlayer = playerTeams.get(p.playerid) ?? [null];
   for (const link of linksForPlayer) {
     const row = [
-      p.playerid, fullName, lookup(p.firstnameid), lookup(p.lastnameid), lookup(p.playerjerseynameid),
+      p.playerid, fullName, lookupFirst(p.firstnameid), lookupLast(p.lastnameid), lookupJersey(p),
       link ? teamNames.get(link.teamid) ?? '' : '', link?.teamid ?? '', p.overallrating, p.potential,
       p.birthdate, p.nationality, p.preferredposition1, p.preferredposition2, p.preferredposition3,
       p.preferredfoot, p.weakfootabilitytypecode, p.skillmoves, p.height, p.weight, p.wage,
@@ -88,10 +95,36 @@ function table(db, name) {
   if (!found) throw new Error(`Falta la tabla ${name}.`);
   return found;
 }
-function lookup(id) { return nameMap.get(id) ?? (id > 0 ? `[ID ${id}]` : ''); }
+function loadCareerNames(data) {
+  if (data.career_firstnames) {
+    for (const row of data.career_firstnames) if (row.firstnameid && row.firstname) careerFirstNames.set(row.firstnameid, typeof row.firstname === 'string' ? row.firstname : nameMap.get(row.firstname) ?? '');
+  }
+  if (data.career_lastnames) {
+    for (const row of data.career_lastnames) if (row.lastnameid && row.lastname) careerLastNames.set(row.lastnameid, typeof row.lastname === 'string' ? row.lastname : nameMap.get(row.lastname) ?? '');
+  }
+  if (data.career_commonnames) {
+    for (const row of data.career_commonnames) {
+      const first = typeof row.firstname === 'string' ? row.firstname : nameMap.get(row.firstname);
+      const last = typeof row.lastname === 'string' ? row.lastname : nameMap.get(row.lastname);
+      const name = [first, last].filter(Boolean).join(' ').trim();
+      if (row.commonnameid && name) careerCommonNames.set(row.commonnameid, name);
+    }
+  }
+}
+function generatedName(id, pool) {
+  if (id < 46000) return '';
+  return pool.get(id - 45999) || undefined;
+}
+function lookupFirst(id) { return nameMap.get(id) ?? generatedName(id, careerFirstNames) ?? (id > 0 ? `[ID ${id}]` : ''); }
+function lookupLast(id) { return nameMap.get(id) ?? generatedName(id, careerLastNames) ?? (id > 0 ? `[ID ${id}]` : ''); }
+function lookupJersey(p) {
+  const id = p.playerjerseynameid;
+  return nameMap.get(id) ?? generatedName(id, careerLastNames) ?? generatedName(id, careerFirstNames) ?? (id > 0 ? `[ID ${id}]` : '');
+}
 function resolveName(p) {
-  if (p.commonnameid && nameMap.has(p.commonnameid)) return nameMap.get(p.commonnameid);
-  const first = lookup(p.firstnameid), last = lookup(p.lastnameid);
+  if (p.commonnameid && (nameMap.has(p.commonnameid) || careerCommonNames.has(p.commonnameid - 45999)))
+    return nameMap.get(p.commonnameid) ?? careerCommonNames.get(p.commonnameid - 45999);
+  const first = lookupFirst(p.firstnameid), last = lookupLast(p.lastnameid);
   return [first, last].filter(Boolean).join(' ').trim() || `Jugador ${p.playerid}`;
 }
 function escapeCsv(value) {
