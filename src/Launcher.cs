@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -54,8 +55,10 @@ internal static class Launcher
     {
         string root = MainWindow.AssetRoot;
         string node = Path.Combine(root, "runtime", "node.exe");
+        string python = Path.Combine(root, "runtime", "python", "python.exe");
         string script = Path.Combine(root, "parser", "parse-fc27-career.mjs");
-        if (File.Exists(node) && File.Exists(script)) return;
+        string extractor = Path.Combine(root, "parser", "extract-fc27-databases.py");
+        if (File.Exists(node) && File.Exists(python) && File.Exists(script) && File.Exists(extractor)) return;
 
         if (Directory.Exists(root)) Directory.Delete(root, true);
         Directory.CreateDirectory(root);
@@ -80,7 +83,7 @@ internal sealed class MainWindow : Form
 {
     internal static readonly string AssetRoot = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "FC27 Carrera CSV", "1.1");
+        "FC27 Carrera CSV", "2.2");
     private readonly Label status = new Label();
     private readonly Label selected = new Label();
     private readonly Button choose = new Button();
@@ -104,7 +107,7 @@ internal sealed class MainWindow : Form
             Location = new Point(28, 25)
         };
         var help = new Label {
-            Text = "Elige el archivo de guardado de FC27. Crearé un CSV en la misma carpeta,\nsin cambiar el archivo original.",
+            Text = "Elige el guardado de FC27. La primera vez prepararé los nombres desde el juego;\nel CSV se guardará junto al archivo sin modificarlo.",
             Font = new Font("Segoe UI", 10),
             AutoSize = true,
             Location = new Point(30, 76)
@@ -171,6 +174,26 @@ internal sealed class MainWindow : Form
             status.Text = "Leyendo el guardado y creando el CSV…";
             try
             {
+                string playerNames = Path.Combine(AssetRoot, "parser", "playernames-fc27.json");
+                string careerNames = Path.Combine(AssetRoot, "parser", "career-names-fc27.json");
+                if (!File.Exists(playerNames) || !File.Exists(careerNames))
+                {
+                    string gameDirectory = FindGameDirectory();
+                    if (String.IsNullOrWhiteSpace(gameDirectory))
+                    {
+                        using (var folder = new FolderBrowserDialog())
+                        {
+                            folder.Description = "Selecciona la carpeta donde está instalado EA SPORTS FC 27.";
+                            folder.ShowNewFolderButton = false;
+                            if (folder.ShowDialog(this) != DialogResult.OK) return;
+                            gameDirectory = folder.SelectedPath;
+                        }
+                    }
+                    status.Text = "Preparando nombres de FC27; esto solo se hace la primera vez…";
+                    string selectedGame = gameDirectory;
+                    await Task.Run(() => PrepareGameNames(selectedGame));
+                }
+                status.Text = "Leyendo el guardado y creando el CSV…";
                 string details = await RunParser(save, output);
                 lastOutput = output;
                 openFolder.Enabled = true;
@@ -193,6 +216,11 @@ internal sealed class MainWindow : Form
 
     internal static async Task<string> RunParser(string save, string output)
     {
+        string playerNames = Path.Combine(AssetRoot, "parser", "playernames-fc27.json");
+        string careerNames = Path.Combine(AssetRoot, "parser", "career-names-fc27.json");
+        if (!File.Exists(playerNames) || !File.Exists(careerNames))
+            await Task.Run(() => PrepareGameNames(FindGameDirectory()));
+
         string app = AssetRoot;
         string node = Path.Combine(app, "runtime", "node.exe");
         string parserDir = Path.Combine(app, "parser");
@@ -222,6 +250,104 @@ internal sealed class MainWindow : Form
             if (process.ExitCode != 0)
                 throw new InvalidOperationException(String.IsNullOrWhiteSpace(error) ? message : error);
             return String.IsNullOrWhiteSpace(message) ? "CSV creado correctamente." : message;
+        }
+    }
+
+    private static string FindGameDirectory()
+    {
+        string configured = Environment.GetEnvironmentVariable("FC27_GAME_DIR");
+        var candidates = new List<string>();
+        if (!String.IsNullOrWhiteSpace(configured)) candidates.Add(configured);
+        candidates.AddRange(new[] {
+            @"C:\Program Files (x86)\Steam\steamapps\common\EA SPORTS FC 27",
+            @"C:\Program Files\EA Games\EA SPORTS FC 27",
+            @"C:\Program Files (x86)\EA Games\EA SPORTS FC 27"
+        });
+        for (char drive = 'D'; drive <= 'Z'; drive++)
+        {
+            candidates.Add(drive + @":\SteamLibrary\steamapps\common\EA SPORTS FC 27");
+            candidates.Add(drive + @":\Program Files (x86)\Steam\steamapps\common\EA SPORTS FC 27");
+            candidates.Add(drive + @":\Program Files\EA Games\EA SPORTS FC 27");
+        }
+        foreach (string candidate in candidates)
+        {
+            string bundle = Path.Combine(candidate, "Data", "Win32", "superbundlelayout", "installpackage_00");
+            if (Directory.Exists(bundle) && Directory.GetFiles(bundle, "cas_*.cas").Length > 0) return candidate;
+        }
+        return null;
+    }
+
+    private static void PrepareGameNames(string gameDirectory)
+    {
+        if (String.IsNullOrWhiteSpace(gameDirectory))
+            throw new InvalidOperationException("No encontré FC27 instalado. Selecciona la carpeta del juego e inténtalo de nuevo.");
+
+        string root = AssetRoot;
+        string parserDir = Path.Combine(root, "parser");
+        string python = Path.Combine(root, "runtime", "python", "python.exe");
+        string node = Path.Combine(root, "runtime", "node.exe");
+        string extractor = Path.Combine(parserDir, "extract-fc27-databases.py");
+        string nameBuilder = Path.Combine(parserDir, "build-career-names.mjs");
+        string namesPath = Path.Combine(parserDir, "playernames-fc27.json");
+        string careerNamesPath = Path.Combine(parserDir, "career-names-fc27.json");
+        string gameDbDir = Path.Combine(root, "game-db");
+        Directory.CreateDirectory(gameDbDir);
+
+        string[] casFiles = { "cas_08.cas", "cas_01.cas", "cas_02.cas", "cas_03.cas", "cas_04.cas", "cas_05.cas", "cas_06.cas", "cas_07.cas", "cas_09.cas", "cas_10.cas" };
+        string lastError = "";
+        foreach (string cas in casFiles)
+        {
+            string casPath = Path.Combine(gameDirectory, "Data", "Win32", "superbundlelayout", "installpackage_00", cas);
+            if (!File.Exists(casPath)) continue;
+            ProcessResult extracted = RunChild(python, Quote(extractor) + " --game-dir " + Quote(gameDirectory) +
+                " --cas " + Quote(cas) + " --out " + Quote(gameDbDir), parserDir);
+            if (extracted.ExitCode != 0) { lastError = extracted.Error; continue; }
+
+            foreach (string db in Directory.GetFiles(gameDbDir, "*.fifa_ng_db"))
+            {
+                string args = Quote(nameBuilder) + " --game-db " + Quote(db) + " --out " + Quote(careerNamesPath) +
+                    " --names-out " + Quote(namesPath);
+                ProcessResult built = RunChild(node, args, parserDir);
+                if (built.ExitCode == 0 && File.Exists(namesPath) && File.Exists(careerNamesPath)) return;
+                lastError = built.Error;
+            }
+        }
+        throw new InvalidOperationException("No pude preparar los nombres desde los archivos de FC27. " +
+            "Comprueba que seleccionaste la carpeta correcta del juego. " + lastError);
+    }
+
+    private static ProcessResult RunChild(string executable, string arguments, string workingDirectory)
+    {
+        var start = new ProcessStartInfo {
+            FileName = executable,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        using (var process = new Process())
+        {
+            process.StartInfo = start;
+            process.Start();
+            Task<string> stdout = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderr = process.StandardError.ReadToEndAsync();
+            process.WaitForExit();
+            return new ProcessResult(process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+        }
+    }
+
+    private sealed class ProcessResult
+    {
+        internal readonly int ExitCode;
+        internal readonly string Output;
+        internal readonly string Error;
+        internal ProcessResult(int exitCode, string output, string error)
+        {
+            ExitCode = exitCode;
+            Output = output;
+            Error = error;
         }
     }
 
