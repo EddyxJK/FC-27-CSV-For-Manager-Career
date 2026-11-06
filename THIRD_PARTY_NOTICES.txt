@@ -1,0 +1,20 @@
+DEPENDENCIAS Y REFERENCIAS
+=========================
+
+eafc-db-kit 1.1.0
+Autor: ViniMacacari
+Repositorio: https://github.com/ViniMacacari/eafc-db-kit
+Licencia publicada: MIT
+Se instala desde npm al compilar; el código de terceros no se copia a este repositorio.
+
+FC Career Mode Web Parser
+Autor de GitHub: GioAc96
+Repositorio: https://github.com/GioAc96/fc-cm-web-parser
+Referencia de inspiración para la experiencia de exportar datos de Carrera. No se copia código de ese repositorio.
+
+FC 26 Save Parser & Scout
+Autor de GitHub: mhirst1992
+Repositorio: https://github.com/mhirst1992/fc26-save-parser
+Referencia para la investigación comunitaria sobre contenedores de guardados. No se copia código de ese repositorio.
+
+Este archivo reconoce inspiración y dependencias; no reemplaza ni extiende las licencias de los proyectos citados.

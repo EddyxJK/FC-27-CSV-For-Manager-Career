@@ -1,0 +1,40 @@
+FC27 MANAGER CAREER CSV
+Guía de uso y agradecimientos
+========================================
+
+USO EN WINDOWS
+
+1. Descarga el proyecto y extrae todos sus archivos en una carpeta.
+2. Instala Node.js versión 24 o posterior.
+3. Abre PowerShell dentro de la carpeta del proyecto.
+4. Ejecuta: .\build-windows.ps1
+5. Abre: dist\FC27 Carrera CSV.exe
+6. En la ventana, pulsa “Elegir guardado y exportar CSV…” y selecciona el archivo de Carrera de mánager que comienza con CmMgrC.
+7. El programa crea un archivo terminado en _jugadores.csv junto al guardado. Puedes abrirlo con Excel u otra hoja de cálculo.
+
+La primera vez que se compile, se necesita conexión a Internet para descargar la dependencia de código abierto eafc-db-kit. Al analizar un guardado, el parser trabaja localmente. No envía el archivo a Internet. Nunca publiques tu guardado ni el CSV si contienen datos de una carrera privada.
+
+Si el CSV ya existe, el programa pregunta antes de reemplazarlo. El archivo original del juego se abre solo para lectura.
+
+NOMBRES NO RESUELTOS
+
+Algunos jugadores generados pueden aparecer con un marcador como [ID 46000]. Para mejorar la resolución de nombres en el parser directo, se puede indicar una base FC27 con la tabla playernames mediante --names-db. Al compilar la aplicación de Windows, un diccionario JSON se incorpora solo si se pasa explícitamente con -NamesJson. Los diccionarios derivados del juego se excluyen de Git.
+
+AGRADECIMIENTOS
+
+Gracias a GioAc96 por la idea y el trabajo inicial de exportar información de Carrera a una aplicación web y CSV:
+https://github.com/GioAc96/fc-cm-web-parser
+
+Gracias a mhirst1992 por documentar y explorar la estructura de los guardados de Carrera de EA SPORTS FC:
+https://github.com/mhirst1992/fc26-save-parser
+
+El lector de bases de datos y los esquemas FC27 se apoyan en eafc-db-kit, creado por ViniMacacari y publicado bajo licencia MIT:
+https://github.com/ViniMacacari/eafc-db-kit
+
+Este proyecto agradece esas ideas y herramientas; no incluye copias de los parsers de GioAc96 o mhirst1992. eafc-db-kit se instala como dependencia durante la compilación. Sus avisos de licencia se conservan con la dependencia.
+
+Gracias también a las personas de la comunidad que comparten sus hallazgos y ayudan a que los formatos de guardado sean más fáciles de entender.
+
+LICENCIA Y MARCAS
+
+El código propio de este proyecto se distribuye bajo MIT (ver LICENSE). EA SPORTS FC y sus nombres de jugadores, clubes y competiciones pertenecen a sus respectivos titulares. Proyecto comunitario no oficial, sin afiliación ni respaldo de Electronic Arts.

@@ -1,0 +1,10 @@
+{
+  "name": "fc27-career-csv-exporter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "eafc-db-kit": "1.1.0"
+  }
+}
