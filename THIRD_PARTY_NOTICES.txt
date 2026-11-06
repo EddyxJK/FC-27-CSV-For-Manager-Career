@@ -4,8 +4,18 @@ DEPENDENCIAS Y REFERENCIAS
 eafc-db-kit 1.1.0
 Autor: ViniMacacari
 Repositorio: https://github.com/ViniMacacari/eafc-db-kit
-Licencia publicada: MIT
-Se instala desde npm al compilar; el código de terceros no se copia a este repositorio.
+Licencia: MIT
+Se instala desde npm al compilar; sus avisos y licencia se incluyen en la carpeta parser del ejecutable.
+
+Node.js runtime
+Proyecto: OpenJS Foundation / Node.js contributors
+Repositorio: https://github.com/nodejs/node
+Licencia: MIT; el aviso de licencia se incluye con los avisos del ejecutable.
+
+Python 3.12.14 runtime
+Python Software Foundation License Version 2
+El ejecutable incorpora el intérprete portátil y la biblioteca estándar. LICENSE.txt de Python se incluye dentro del paquete interno del ejecutable.
+https://docs.python.org/3/license.html
 
 FC Career Mode Web Parser
 Autor de GitHub: GioAc96

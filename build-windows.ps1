@@ -1,18 +1,14 @@
 param(
     [string]$NodePath = "",
-    [string]$NamesJson = "",
-    [string]$CareerNamesJson = "",
-    [string]$DependenciesDirectory = "",
-    [string]$GameDirectory = "",
     [string]$PythonPath = "",
-    [switch]$SkipGameData
+    [string]$DependenciesDirectory = ""
 )
 
 $ErrorActionPreference = 'Stop'
 $project = $PSScriptRoot
 
 if ([string]::IsNullOrWhiteSpace($NodePath)) {
-    $nodeCommand = Get-Command node -ErrorAction Stop
+    $nodeCommand = Get-Command node.exe -ErrorAction Stop
     $NodePath = $nodeCommand.Source
 }
 $nodeVersion = (& $NodePath --version).Trim()
@@ -20,18 +16,50 @@ if ($LASTEXITCODE -ne 0 -or [int]($nodeVersion -replace '^v([0-9]+).*$', '$1') -
     throw "Se requiere Node.js 24 o posterior. Versión encontrada: $nodeVersion"
 }
 
+if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    $pythonLauncher = Get-Command py.exe -ErrorAction SilentlyContinue
+    if ($pythonLauncher) { $PythonPath = $pythonLauncher.Source }
+    else {
+        $pythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+        if (-not $pythonCommand) { throw 'Para compilar desde el código fuente se necesita Python 3.' }
+        $PythonPath = $pythonCommand.Source
+    }
+}
+$pythonArgs = @()
+if ([IO.Path]::GetFileName($PythonPath) -ieq 'py.exe') { $pythonArgs = @('-3') }
+$pythonInfo = & $PythonPath @pythonArgs -c "import sys; print(sys.executable); print(sys.version_info.major * 100 + sys.version_info.minor); print(sys.base_prefix)"
+if ($LASTEXITCODE -ne 0 -or $pythonInfo.Count -lt 3) { throw 'No pude ejecutar Python 3 para preparar el ejecutable.' }
+$pythonExe = $pythonInfo[0].Trim()
+$pythonTag = $pythonInfo[1].Trim()
+$pythonRoot = $pythonInfo[2].Trim()
+
 $buildRoot = Join-Path $project '.build'
 $assets = Join-Path $buildRoot 'assets'
 $parserDir = Join-Path $assets 'parser'
 $runtimeDir = Join-Path $assets 'runtime'
+$pythonRuntime = Join-Path $runtimeDir 'python'
 $distDir = Join-Path $project 'dist'
 $payload = Join-Path $buildRoot 'payload.zip'
 
 if (Test-Path $buildRoot) { Remove-Item -LiteralPath $buildRoot -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $parserDir, $runtimeDir, $distDir | Out-Null
+New-Item -ItemType Directory -Force -Path $parserDir, $runtimeDir, $pythonRuntime, $distDir | Out-Null
 Copy-Item -Force (Join-Path $project 'src/parse-fc27-career.mjs') $parserDir
 Copy-Item -Force (Join-Path $project 'src/build-career-names.mjs') $parserDir
+Copy-Item -Force (Join-Path $project 'src/extract-fc27-databases.py') $parserDir
 Copy-Item -Force $NodePath (Join-Path $runtimeDir 'node.exe')
+Copy-Item -Force (Join-Path $project 'LICENSE') (Join-Path $parserDir 'PROJECT-LICENSE.txt')
+Copy-Item -Force (Join-Path $project 'THIRD_PARTY_NOTICES.txt') $parserDir
+Copy-Item -Force $pythonExe $pythonRuntime
+Get-ChildItem -LiteralPath $pythonRoot -File -Filter '*.dll' | Copy-Item -Destination $pythonRuntime
+Copy-Item -Recurse -Force (Join-Path $pythonRoot 'DLLs') $pythonRuntime
+Get-ChildItem -LiteralPath (Join-Path $pythonRoot 'Lib') -Force |
+    Where-Object { $_.Name -ne 'site-packages' } |
+    Copy-Item -Destination (Join-Path $pythonRuntime 'Lib') -Recurse -Force
+$pythonPth = "python$pythonTag._pth"
+@('.', 'DLLs', 'Lib') | Set-Content -LiteralPath (Join-Path $pythonRuntime $pythonPth) -Encoding ascii
+if (Test-Path (Join-Path $pythonRoot 'LICENSE.txt')) {
+    Copy-Item -Force (Join-Path $pythonRoot 'LICENSE.txt') (Join-Path $pythonRuntime 'LICENSE.txt')
+}
 Copy-Item -Force (Join-Path $project 'package.json') (Join-Path $parserDir 'package.json')
 
 if (-not [string]::IsNullOrWhiteSpace($DependenciesDirectory)) {
@@ -50,84 +78,8 @@ else {
     finally { Pop-Location }
 }
 
-if (-not $SkipGameData -and ([string]::IsNullOrWhiteSpace($NamesJson) -or [string]::IsNullOrWhiteSpace($CareerNamesJson))) {
-    $pythonArgs = @()
-    if ([string]::IsNullOrWhiteSpace($PythonPath)) {
-        $pythonLauncher = Get-Command py.exe -ErrorAction SilentlyContinue
-        if ($pythonLauncher) {
-            $PythonPath = $pythonLauncher.Source
-            $pythonArgs = @('-3')
-        }
-        else {
-            $pythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
-            if (-not $pythonCommand) { throw 'Para generar los nombres automáticamente instala Python 3, o compila con -SkipGameData para omitirlos.' }
-            $PythonPath = $pythonCommand.Source
-        }
-    }
-    $pythonVersion = (& $PythonPath @pythonArgs --version 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $pythonVersion -notmatch '^Python 3\.') {
-        throw 'No pude ejecutar Python 3. Instálalo y vuelve a compilar, o usa -SkipGameData para omitir la extracción de nombres.'
-    }
-
-    $gameDbDir = Join-Path $buildRoot 'game-db'
-    New-Item -ItemType Directory -Force -Path $gameDbDir | Out-Null
-    $extractor = Join-Path $project 'src/extract-fc27-databases.py'
-    $careerNamesLocal = Join-Path $buildRoot 'career-names-fc27.json'
-    $playerNamesLocal = Join-Path $buildRoot 'playernames-fc27.json'
-    $foundCareerNames = $false
-    if ([string]::IsNullOrWhiteSpace($GameDirectory)) {
-        $GameDirectory = $env:FC27_GAME_DIR
-        if ([string]::IsNullOrWhiteSpace($GameDirectory) -or -not (Test-Path -LiteralPath $GameDirectory -PathType Container)) {
-            $gameCandidates = @('C:\Program Files (x86)\Steam\steamapps\common\EA SPORTS FC 27',
-                'C:\Program Files\EA Games\EA SPORTS FC 27')
-            foreach ($drive in 'D','E','F','G','H','I','J') {
-                $gameCandidates += "${drive}:\SteamLibrary\steamapps\common\EA SPORTS FC 27"
-                $gameCandidates += "${drive}:\Program Files (x86)\Steam\steamapps\common\EA SPORTS FC 27"
-            }
-            $GameDirectory = $gameCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Container } | Select-Object -First 1
-        }
-        if ([string]::IsNullOrWhiteSpace($GameDirectory)) {
-            throw 'No encontré la instalación de FC27. Instálalo o compila indicando -GameDirectory "C:\ruta\EA SPORTS FC 27".'
-        }
-    }
-    $casOrder = @('cas_08.cas') + (1..10 | ForEach-Object { "cas_{0:D2}.cas" -f $_ } | Where-Object { $_ -ne 'cas_08.cas' })
-
-    foreach ($casName in $casOrder) {
-        $extractArgs = @($pythonArgs) + @($extractor, '--cas', $casName, '--out', $gameDbDir)
-        if (-not [string]::IsNullOrWhiteSpace($GameDirectory)) { $extractArgs += @('--game-dir', $GameDirectory) }
-        & $PythonPath @extractArgs
-        if ($LASTEXITCODE -ne 0) { continue }
-
-        foreach ($gameDb in (Get-ChildItem -LiteralPath $gameDbDir -Filter '*.fifa_ng_db' -File)) {
-            $helperArgs = @((Join-Path $parserDir 'build-career-names.mjs'), '--game-db', $gameDb.FullName,
-                '--out', $careerNamesLocal, '--names-out', $playerNamesLocal)
-            & $NodePath @helperArgs 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                $foundCareerNames = $true
-                break
-            }
-        }
-        if ($foundCareerNames) { break }
-    }
-
-    if (-not $foundCareerNames) {
-        throw 'No pude encontrar las listas de nombres de Carrera en la instalación de FC27. Indica -GameDirectory o entrega -NamesJson y -CareerNamesJson; -SkipGameData compila sin diccionarios.'
-    }
-    if ([string]::IsNullOrWhiteSpace($NamesJson)) { $NamesJson = $playerNamesLocal }
-    if ([string]::IsNullOrWhiteSpace($CareerNamesJson)) { $CareerNamesJson = $careerNamesLocal }
-}
-
-if (-not [string]::IsNullOrWhiteSpace($NamesJson)) {
-    if (-not (Test-Path $NamesJson -PathType Leaf)) { throw "No encontré el diccionario indicado: $NamesJson" }
-    Copy-Item -Force $NamesJson (Join-Path $parserDir 'playernames-fc27.json')
-    Write-Warning 'El diccionario quedará incorporado al ejecutable. No publiques ese ejecutable ni el diccionario si contienen datos que no quieras compartir.'
-}
-
-if (-not [string]::IsNullOrWhiteSpace($CareerNamesJson)) {
-    if (-not (Test-Path $CareerNamesJson -PathType Leaf)) { throw "No encontré el diccionario indicado: $CareerNamesJson" }
-    Copy-Item -Force $CareerNamesJson (Join-Path $parserDir 'career-names-fc27.json')
-    Write-Warning 'El diccionario de nombres de carrera quedará incorporado al ejecutable. No publiques el ejecutable ni este archivo de datos del juego en GitHub.'
-}
+$pythonCheck = & (Join-Path $pythonRuntime 'python.exe') -c "import argparse, ctypes, os, struct, zlib; print('Python runtime OK')"
+if ($LASTEXITCODE -ne 0) { throw "El Python portátil no pudo iniciar: $pythonCheck" }
 
 Compress-Archive -Path (Join-Path $assets 'parser'), (Join-Path $assets 'runtime') -DestinationPath $payload -CompressionLevel Optimal
 
@@ -147,3 +99,4 @@ $resourceArg = "$payload,FC27CarreraCsv.Payload.zip"
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $outputExe)) { throw 'No se pudo compilar el ejecutable.' }
 
 Write-Host "Aplicación creada: $outputExe"
+Write-Host 'El ejecutable no contiene datos de EA. Al usarlo, obtiene las listas de nombres desde el FC27 instalado en ese equipo.'

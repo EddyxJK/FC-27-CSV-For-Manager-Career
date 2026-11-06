@@ -2,23 +2,24 @@ FC27 MANAGER CAREER CSV
 Guía de uso y agradecimientos
 ========================================
 
-USO EN WINDOWS
+USO DEL EJECUTABLE
 
-1. Descarga el proyecto y extrae todos sus archivos en una carpeta.
-2. Instala Node.js versión 24 o posterior.
-3. Abre PowerShell dentro de la carpeta del proyecto.
-4. Ejecuta: .\build-windows.ps1
-5. Abre: dist\FC27 Carrera CSV.exe
-6. En la ventana, pulsa “Elegir guardado y exportar CSV…” y selecciona el archivo de Carrera de mánager que comienza con CmMgrC.
-7. El programa crea un archivo terminado en _jugadores.csv junto al guardado. Puedes abrirlo con Excel u otra hoja de cálculo.
+1. Descarga FC27 Carrera CSV.exe desde Releases y ábrelo.
+2. Selecciona el guardado de Carrera de mánager que comienza con CmMgrC.
+3. La primera vez, la aplicación localiza FC27 y prepara las tablas de nombres desde los archivos instalados del juego. Este paso puede tardar un poco y solo se hace una vez.
+4. El programa crea un archivo terminado en _jugadores.csv junto al guardado. Puedes abrirlo con Excel u otra hoja de cálculo.
 
-La primera vez que se compile, se necesita conexión a Internet para descargar la dependencia de código abierto eafc-db-kit. Al analizar un guardado, el parser trabaja localmente. No envía el archivo a Internet. Nunca publiques tu guardado ni el CSV si contienen datos de una carrera privada.
+El ejecutable incluye Node y Python portátiles; no necesitas instalarlos ni usar PowerShell. FC27 debe estar instalado para poder preparar los nombres. Si el juego no está en una ruta habitual, la aplicación te pedirá seleccionar la carpeta de instalación.
 
-Si el CSV ya existe, el programa pregunta antes de reemplazarlo. El archivo original del juego se abre solo para lectura.
+El guardado original se abre solo para lectura. El procesamiento ocurre localmente y no se envían el guardado, los nombres extraídos ni el CSV a ningún servicio. Las tablas extraídas se guardan en %LOCALAPPDATA%\FC27 Carrera CSV para reutilizarlas en exportaciones futuras.
 
-NOMBRES NO RESUELTOS
+COMPILAR DESDE EL CÓDIGO FUENTE
 
-Los jugadores generados por la carrera usan IDs especiales para sus nombres. Al compilar, build-windows.ps1 busca la instalación local de FC27, extrae sus tablas de nombres y las incorpora al ejecutable. Requiere Node.js 24 o posterior y Python 3. Los archivos del juego y diccionarios solo se guardan localmente dentro de .build/ y se excluyen de GitHub. Si FC27 está en otra carpeta, usa -GameDirectory "ruta". Sin una instalación local del juego, se puede compilar con -SkipGameData, pero algunos nombres aparecerán como [ID n].
+Para compilar desde el repositorio se necesita Node.js 24 o posterior, Python 3 y conexión a Internet para instalar eafc-db-kit. Desde PowerShell en la carpeta del proyecto, ejecuta:
+
+    .\build-windows.ps1
+
+Esto crea dist\FC27 Carrera CSV.exe. La compilación no contiene datos de EA; la aplicación los extrae del FC27 instalado al primer uso.
 
 AGRADECIMIENTOS
 
