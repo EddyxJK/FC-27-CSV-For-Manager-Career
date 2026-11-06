@@ -2,8 +2,6 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
-using System.IO.Compression;
-using System.Reflection;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -58,32 +56,16 @@ internal static class Launcher
         string python = Path.Combine(root, "runtime", "python", "python.exe");
         string script = Path.Combine(root, "parser", "parse-fc27-career.mjs");
         string extractor = Path.Combine(root, "parser", "extract-fc27-databases.py");
-        if (File.Exists(node) && File.Exists(python) && File.Exists(script) && File.Exists(extractor)) return;
-
-        if (Directory.Exists(root)) Directory.Delete(root, true);
-        Directory.CreateDirectory(root);
-        string archive = Path.Combine(Path.GetTempPath(), "fc27-carrera-" + Guid.NewGuid().ToString("N") + ".zip");
-        try
-        {
-            using (Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("FC27CarreraCsv.Payload.zip"))
-            {
-                if (resource == null) throw new InvalidOperationException("No encontré los componentes incluidos en el ejecutable.");
-                using (var file = File.Create(archive)) resource.CopyTo(file);
-            }
-            ZipFile.ExtractToDirectory(archive, root);
-        }
-        finally
-        {
-            if (File.Exists(archive)) File.Delete(archive);
-        }
+        string nameBuilder = Path.Combine(root, "parser", "build-career-names.mjs");
+        if (File.Exists(node) && File.Exists(python) && File.Exists(script) &&
+            File.Exists(extractor) && File.Exists(nameBuilder)) return;
+        throw new FileNotFoundException("Faltan componentes del programa. Extrae el ZIP completo y abre FC27 Carrera CSV.exe desde esa carpeta.");
     }
 }
 
 internal sealed class MainWindow : Form
 {
-    internal static readonly string AssetRoot = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "FC27 Carrera CSV", "2.2");
+    internal static readonly string AssetRoot = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
     private readonly Label status = new Label();
     private readonly Label selected = new Label();
     private readonly Button choose = new Button();
